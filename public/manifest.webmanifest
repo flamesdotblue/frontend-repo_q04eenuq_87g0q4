@@ -1,0 +1,13 @@
+{
+  "name": "Fintrack PWA",
+  "short_name": "Fintrack",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "description": "Offline-first personal finance tracker. 100% local and private.",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
