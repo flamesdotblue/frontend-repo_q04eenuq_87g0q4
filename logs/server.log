@@ -3,7 +3,9 @@
 > vite
 
 
-  VITE v5.4.20  ready in 219 ms
+  VITE v5.4.20  ready in 223 ms
 
   ➜  Local:   http://localhost:3000/
   ➜  Network: http://172.20.28.63:3000/
+2:16:19 PM [vite] ✨ new dependencies optimized: jspdf
+2:16:19 PM [vite] ✨ optimized dependencies changed. reloading
