@@ -1,278 +1,188 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import HeroSpline from './components/HeroSpline';
-import StatCards from './components/StatCards';
-import IncomeExpenseChart from './components/IncomeExpenseChart';
-import FloatingActionButton from './components/FloatingActionButton';
-import { useAppStore } from './store/appStore';
-import { FileDown, FileUp, Lock, FileText } from 'lucide-react';
-import jsPDF from 'jspdf';
+import React, { useMemo, useRef, useState } from 'react';
+import { Download, Upload, Share2 } from 'lucide-react';
+import HeroSpline from './components/HeroSpline.jsx';
+import ReportsChart from './components/ReportsChart.jsx';
+import CRUDTabs from './components/CRUDTabs.jsx';
+import BudgetsGoals from './components/BudgetsGoals.jsx';
 
-function App() {
-  const {
-    ready,
-    locked,
-    init,
-    accounts,
-    transactions,
-    addAccount,
-    addTransaction,
-    transfer,
-    exportJSON,
-    importJSON,
-    exportEncrypted,
-    importEncrypted,
-    setPIN,
-    clearPIN,
-    unlock,
-  } = useAppStore();
+function uid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'id-' + Math.random().toString(36).slice(2) + Date.now();
+}
 
-  // Service worker registration and theme init
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+export default function App() {
+  const fileRef = useRef(null);
+
+  // Demo local state. In a full app this would be persisted with IndexedDB (Dexie) or a backend.
+  const [accounts, setAccounts] = useState([
+    { id: uid(), name: 'Cash', type: 'Wallet', balance: 250.0 },
+    { id: uid(), name: 'Checking', type: 'Bank', balance: 1340.42 },
+  ]);
+  const [transactions, setTransactions] = useState([
+    { id: uid(), title: 'Groceries', type: 'expense', amount: 54.2, date: new Date().toISOString().slice(0,10), accountId: '' },
+    { id: uid(), title: 'Salary', type: 'income', amount: 2200, date: new Date().toISOString().slice(0,10), accountId: '' },
+  ]);
+  const [investments, setInvestments] = useState([
+    { id: uid(), asset: 'AAPL', title: 'Buy AAPL', amount: 300, date: new Date().toISOString().slice(0,10), accountId: '' },
+  ]);
+  const [budgets, setBudgets] = useState([
+    { name: 'Food', limit: 300 },
+  ]);
+  const [goals, setGoals] = useState([
+    { title: 'Emergency Fund', target: 1000 },
+  ]);
+
+  // Ensure seeded account IDs on sample data
+  React.useEffect(() => {
+    if (accounts.length > 0) {
+      setTransactions(ts => ts.map(t => t.accountId ? t : { ...t, accountId: accounts[0].id }));
+      setInvestments(iv => iv.map(i => i.accountId ? i : { ...i, accountId: accounts[0].id }));
     }
-    // Prefer system dark
-    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    document.documentElement.classList.toggle('dark', prefersDark);
-  }, []);
-
-  useEffect(() => {
-    init();
-  }, [init]);
-
-  // seed a default account for first-run
-  useEffect(() => {
-    if (ready && accounts.length === 0) {
-      addAccount({ name: 'Cash', type: 'Cash', bank: '', initialBalance: 0 });
-    }
-  }, [ready, accounts.length, addAccount]);
+  }, [accounts.length]);
 
   const totals = useMemo(() => {
-    const inc = transactions.filter(t => t.type === 'income').reduce((a, b) => a + (b.amount || 0), 0);
-    const exp = transactions.filter(t => t.type === 'expense').reduce((a, b) => a + (b.amount || 0), 0);
-    const inv = transactions.filter(t => t.type === 'investment').reduce((a, b) => a + (b.amount || 0), 0);
-    return { inc, exp, inv, net: inc - exp };
+    const income = transactions.filter(t => t.type === 'income').reduce((a,b)=>a + Number(b.amount||0), 0);
+    const expense = transactions.filter(t => t.type === 'expense').reduce((a,b)=>a + Number(b.amount||0), 0);
+    return { income, expense, net: income - expense };
   }, [transactions]);
 
-  const months = useMemo(() => {
-    const now = new Date();
-    const arr = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      arr.push({ key: `${d.getFullYear()}-${d.getMonth() + 1}`, label: d.toLocaleString('en-US', { month: 'short' }) });
+  // CRUD handlers
+  const handleCreate = (type, payload) => {
+    if (type === 'accounts') {
+      setAccounts(prev => [...prev, { id: uid(), balance: Number(payload.balance||0), name: payload.name, type: payload.type }]);
+    } else if (type === 'transactions') {
+      setTransactions(prev => [...prev, { id: uid(), ...payload, amount: Number(payload.amount||0) }]);
+    } else if (type === 'investments') {
+      setInvestments(prev => [...prev, { id: uid(), ...payload, amount: Number(payload.amount||0) }]);
     }
-    return arr;
+  };
+
+  const handleUpdate = (type, id, payload) => {
+    const patch = (list) => list.map(item => item.id === id ? { ...item, ...payload, amount: payload.amount !== undefined ? Number(payload.amount) : item.amount } : item);
+    if (type === 'accounts') setAccounts(list => list.map(a => a.id === id ? { ...a, ...payload, balance: Number(payload.balance||a.balance||0) } : a));
+    if (type === 'transactions') setTransactions(patch);
+    if (type === 'investments') setInvestments(patch);
+  };
+
+  const handleDelete = (type, id) => {
+    if (type === 'accounts') {
+      setAccounts(list => list.filter(a => a.id !== id));
+      setTransactions(list => list.filter(t => t.accountId !== id));
+      setInvestments(list => list.filter(i => i.accountId !== id));
+    }
+    if (type === 'transactions') setTransactions(list => list.filter(t => t.id !== id));
+    if (type === 'investments') setInvestments(list => list.filter(i => i.id !== id));
+  };
+
+  // Budgets & Goals
+  const onAddBudget = (b) => setBudgets(prev => [...prev, b]);
+  const onRemoveBudget = (idx) => setBudgets(prev => prev.filter((_,i)=>i!==idx));
+  const onAddGoal = (g) => setGoals(prev => [...prev, g]);
+  const onRemoveGoal = (idx) => setGoals(prev => prev.filter((_,i)=>i!==idx));
+
+  // Import/Export/Share across devices (free, peer-to-peer via manual link/file)
+  const snapshot = useMemo(() => ({ accounts, transactions, investments, budgets, goals }), [accounts, transactions, investments, budgets, goals]);
+
+  const handleExport = () => {
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `finance-export-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (data.accounts) setAccounts(data.accounts);
+        if (data.transactions) setTransactions(data.transactions);
+        if (data.investments) setInvestments(data.investments);
+        if (data.budgets) setBudgets(data.budgets);
+        if (data.goals) setGoals(data.goals);
+      } catch (e) {
+        alert('Invalid file');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleShareLink = async () => {
+    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(snapshot))));
+    const url = `${window.location.origin}${window.location.pathname}#data=${encoded}`;
+    try { await navigator.clipboard.writeText(url); alert('Share link copied to clipboard. Open on another device to import.'); }
+    catch { prompt('Copy this link:', url); }
+  };
+
+  // Auto-import from hash if present
+  React.useEffect(() => {
+    if (window.location.hash.startsWith('#data=')) {
+      try {
+        const dataStr = decodeURIComponent(escape(atob(window.location.hash.replace('#data=',''))));
+        const data = JSON.parse(dataStr);
+        if (data.accounts) setAccounts(data.accounts);
+        if (data.transactions) setTransactions(data.transactions);
+        if (data.investments) setInvestments(data.investments);
+        if (data.budgets) setBudgets(data.budgets);
+        if (data.goals) setGoals(data.goals);
+        window.location.hash = '';
+      } catch (e) { /* ignore */ }
+    }
   }, []);
 
-  const monthlyChart = useMemo(() => {
-    const map = Object.fromEntries(months.map(m => [m.key, { income: 0, expense: 0, label: m.label }]));
-    transactions.forEach(t => {
-      const d = new Date(t.date);
-      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
-      if (map[key]) {
-        if (t.type === 'income') map[key].income += t.amount;
-        if (t.type === 'expense') map[key].expense += t.amount;
-      }
-    });
-    return months.map(m => ({ label: m.label, ...map[m.key] }));
-  }, [months, transactions]);
-
-  const handleAddIncome = async () => {
-    if (accounts.length === 0) return;
-    const amount = Number(prompt('Amount (₹)') || 0);
-    const accountId = accounts[0].id;
-    if (!amount) return;
-    await addTransaction({ type: 'income', amount, accountId, date: new Date().toISOString(), category: 'Other' });
-  };
-
-  const handleAddExpense = async () => {
-    if (accounts.length === 0) return;
-    const amount = Number(prompt('Amount (₹)') || 0);
-    const accountId = accounts[0].id;
-    if (!amount) return;
-    await addTransaction({ type: 'expense', amount, accountId, date: new Date().toISOString(), category: 'Other' });
-  };
-
-  const handleAddInvestment = async () => {
-    if (accounts.length === 0) return;
-    const amount = Number(prompt('Amount (₹)') || 0);
-    const accountId = accounts[0].id;
-    if (!amount) return;
-    await addTransaction({ type: 'investment', amount, accountId, date: new Date().toISOString(), category: 'Other' });
-  };
-
-  const handleTransfer = async () => {
-    if (accounts.length < 2) {
-      alert('Create at least two accounts to transfer between them.');
-      return;
-    }
-    const amount = Number(prompt('Amount (₹)') || 0);
-    if (!amount) return;
-    await transfer({ fromAccountId: accounts[0].id, toAccountId: accounts[1].id, amount, date: new Date().toISOString() });
-  };
-
-  const handleAddAccount = async () => {
-    const name = prompt('Account Name');
-    if (!name) return;
-    await addAccount({ name, type: 'Savings', bank: '', initialBalance: 0 });
-  };
-
-  const [importing, setImporting] = useState(false);
-
-  // Security: PIN entry overlay if locked
-  const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState('');
-
-  const tryUnlock = async () => {
-    const ok = await unlock(pinInput);
-    if (!ok) {
-      setPinError('Incorrect PIN');
-    } else {
-      setPinInput('');
-      setPinError('');
-    }
-  };
-
-  const handleSetPin = async () => {
-    const pin = prompt('Set a 4+ digit PIN to lock the app');
-    if (pin) await setPIN(pin);
-  };
-  const handleClearPin = async () => {
-    const sure = confirm('Remove PIN lock?');
-    if (sure) await clearPIN();
-  };
-
-  const handleExportEncrypted = async () => {
-    const pwd = prompt('Enter a password to encrypt the backup');
-    if (!pwd) return;
-    await exportEncrypted(pwd);
-  };
-
-  const handleImportEncrypted = async (file) => {
-    const pwd = prompt('Enter the password used for encryption');
-    if (!pwd) return;
-    await importEncrypted(file, pwd);
-  };
-
-  const generateReportPDF = () => {
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text('Fintrack Report', 14, 18);
-    doc.setFontSize(12);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 26);
-    doc.text(`Total Income: ₹ ${Number(totals.inc).toLocaleString('en-IN')}`, 14, 36);
-    doc.text(`Total Expense: ₹ ${Number(totals.exp).toLocaleString('en-IN')}`, 14, 44);
-    doc.text(`Net Balance: ₹ ${Number(totals.net).toLocaleString('en-IN')}`, 14, 52);
-
-    doc.text('Recent Transactions:', 14, 66);
-    const recent = transactions.slice(-20).reverse();
-    let y = 74;
-    recent.forEach((t) => {
-      const line = `${new Date(t.date).toLocaleDateString()}  ${t.type.padEnd(8)}  ₹ ${t.amount}`;
-      doc.text(line, 14, y);
-      y += 8;
-      if (y > 280) { doc.addPage(); y = 20; }
-    });
-
-    doc.save('fintrack-report.pdf');
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-      <header className="sticky top-0 z-10 backdrop-blur bg-white/70 dark:bg-slate-950/60 border-b border-slate-200/60 dark:border-slate-800">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="size-7 rounded-md bg-gradient-to-br from-blue-600 to-indigo-600" />
-            <h2 className="font-semibold tracking-tight">Fintrack PWA</h2>
+    <div className="min-h-screen bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+      <header className="sticky top-0 z-20 border-b border-neutral-200/60 bg-white/80 backdrop-blur dark:border-neutral-800/60 dark:bg-neutral-950/70">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-500 to-blue-600" />
+            <div>
+              <div className="text-sm font-semibold">Fintrack PWA</div>
+              <div className="text-xs text-neutral-500 dark:text-neutral-400">Income {totals.income.toFixed(2)} • Expense {totals.expense.toFixed(2)} • Net {totals.net.toFixed(2)}</div>
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-xs">
-            <button onClick={handleAddAccount} className="px-2.5 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900">Add Account</button>
-            <button onClick={exportJSON} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-emerald-600 text-white"><FileDown size={14}/>Export</button>
-            <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-indigo-600 text-white cursor-pointer">
-              <FileUp size={14}/>{importing ? 'Importing...' : 'Import'}
-              <input type="file" accept="application/json" onChange={async (e)=>{ if(!e.target.files?.[0]) return; setImporting(true); try{ await importJSON(e.target.files[0]); } finally { setImporting(false);} }} className="hidden" />
-            </label>
-            <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-purple-600 text-white cursor-pointer">
-              <Lock size={14}/>Import .enc
-              <input type="file" accept="application/octet-stream" onChange={async (e)=>{ if(!e.target.files?.[0]) return; await handleImportEncrypted(e.target.files[0]); e.target.value=''; }} className="hidden" />
-            </label>
-            <button onClick={handleExportEncrypted} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-fuchsia-600 text-white"><Lock size={14}/>Encrypt Export</button>
-            <button onClick={generateReportPDF} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-amber-600 text-white"><FileText size={14}/>Report PDF</button>
-            {!locked ? (
-              <button onClick={handleSetPin} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-700 text-white"><Lock size={14}/>Set PIN</button>
-            ) : (
-              <button onClick={handleClearPin} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-700 text-white"><Lock size={14}/>Remove PIN</button>
-            )}
+          <div className="flex items-center gap-2">
+            <button onClick={handleExport} className="inline-flex items-center gap-2 rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"><Download size={16}/>Export</button>
+            <button onClick={()=>fileRef.current?.click()} className="inline-flex items-center gap-2 rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"><Upload size={16}/>Import</button>
+            <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={e=>handleImport(e.target.files?.[0])} />
+            <button onClick={handleShareLink} className="inline-flex items-center gap-2 rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:opacity-90 dark:bg-white dark:text-neutral-900"><Share2 size={16}/>Share Link</button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6 space-y-6">
+      <main className="mx-auto max-w-6xl space-y-6 p-4">
         <HeroSpline />
 
-        <StatCards
-          totalIncome={totals.inc}
-          totalExpenses={totals.exp}
-          totalInvestments={totals.inv}
-          netBalance={totals.net}
-        />
+        <section className="grid gap-4 md:grid-cols-2">
+          <ReportsChart transactions={transactions} />
+          <BudgetsGoals 
+            budgets={budgets}
+            goals={goals}
+            transactions={transactions}
+            onAddBudget={onAddBudget}
+            onRemoveBudget={onRemoveBudget}
+            onAddGoal={onAddGoal}
+            onRemoveGoal={onRemoveGoal}
+          />
+        </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            <IncomeExpenseChart monthly={monthlyChart} />
-          </div>
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-            <h3 className="font-semibold mb-3">Recent Transactions</h3>
-            <ul className="space-y-2">
-              {transactions.slice(-10).reverse().map((t, i) => (
-                <li key={i} className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600 dark:text-slate-300 capitalize">{t.type}</span>
-                  <span className={t.type === 'expense' ? 'text-rose-500' : t.type === 'income' ? 'text-emerald-500' : 'text-indigo-500'}>
-                    {t.type === 'expense' ? '-' : '+'} ₹ {Number(t.amount||0).toLocaleString('en-IN')}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-4 border-t border-slate-200 dark:border-slate-800 pt-3">
-              <h4 className="font-medium text-sm mb-2">Accounts</h4>
-              <ul className="space-y-1 text-sm">
-                {accounts.map((a) => (
-                  <li key={a.id} className="flex items-center justify-between">
-                    <span>{a.name}</span>
-                    <span className="text-slate-500">₹ {Number(a.balance||0).toLocaleString('en-IN')}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
+        <section>
+          <CRUDTabs 
+            accounts={accounts}
+            transactions={transactions}
+            investments={investments}
+            onCreate={handleCreate}
+            onUpdate={handleUpdate}
+            onDelete={handleDelete}
+          />
+        </section>
+
+        <footer className="py-8 text-center text-xs text-neutral-500">Offline-first. Share data across devices via export/import or share-link. No cloud required.</footer>
       </main>
-
-      <FloatingActionButton
-        onAddIncome={handleAddIncome}
-        onAddExpense={handleAddExpense}
-        onAddInvestment={handleAddInvestment}
-        onTransfer={handleTransfer}
-      />
-
-      {locked && (
-        <div className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm flex items-center justify-center">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Lock size={18} />
-              <h3 className="font-semibold">App Locked</h3>
-            </div>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">Enter your PIN to unlock</p>
-            <input value={pinInput} onChange={(e)=>setPinInput(e.target.value)} type="password" placeholder="PIN" className="w-full rounded-md border border-slate-300 dark:border-slate-700 bg-transparent px-3 py-2 outline-none" />
-            {pinError && <p className="text-rose-500 text-sm mt-2">{pinError}</p>}
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button onClick={tryUnlock} className="px-3 py-1.5 rounded-md bg-blue-600 text-white">Unlock</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
-
-export default App;

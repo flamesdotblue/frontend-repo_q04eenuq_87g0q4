@@ -1,31 +1,21 @@
 import React from 'react';
 import Spline from '@splinetool/react-spline';
 
-const HeroSpline = () => {
+export default function HeroSpline() {
   return (
-    <section className="relative w-full h-[360px] sm:h-[420px] rounded-2xl overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
-      <Spline
-        scene="https://prod.spline.design/41MGRk-UDPKO-l6W/scene.splinecode"
+    <section className="relative h-[320px] w-full overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900">
+      <Spline 
+        scene="https://prod.spline.design/IKzHtP5ThSO83edK/scene.splinecode" 
         style={{ width: '100%', height: '100%' }}
       />
-
-      {/* gradient overlay that doesn't block interactions with the 3D scene */}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-900/20 to-transparent" />
-
-      <div className="absolute inset-0 flex flex-col items-start justify-end p-6 sm:p-10">
-        <span className="inline-flex items-center gap-2 text-xs sm:text-sm bg-white/10 backdrop-blur px-3 py-1.5 rounded-full border border-white/15 shadow">
-          <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-          Offline-first • Private by design
-        </span>
-        <h1 className="mt-3 text-2xl sm:text-4xl md:text-5xl font-semibold tracking-tight">
-          Your Personal Finance, Simplified
-        </h1>
-        <p className="mt-2 text-sm sm:text-base text-slate-300 max-w-2xl">
-          Track income, expenses, and investments locally. Installable PWA that works entirely offline.
-        </p>
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-white via-transparent to-white/40 dark:from-neutral-950 dark:to-neutral-950/40" />
+      <div className="pointer-events-none absolute inset-0 flex items-end justify-between p-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">Your Finances, Simplified</h1>
+          <p className="mt-1 max-w-xl text-sm text-neutral-600 dark:text-neutral-400">Offline-first personal finance tracker with budgets, goals, and rich insights. Import/export to move data across devices for free.</p>
+        </div>
+        <div className="hidden rounded-full bg-white/70 px-3 py-1 text-xs backdrop-blur md:block dark:bg-neutral-900/60 dark:text-neutral-300">3D cover by Spline</div>
       </div>
     </section>
   );
-};
-
-export default HeroSpline;
+}
