@@ -1,9 +1,8 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { Download, Upload, Share2 } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
 import HeroSpline from './components/HeroSpline.jsx';
-import ReportsChart from './components/ReportsChart.jsx';
+import DashboardOverview from './components/DashboardOverview.jsx';
 import CRUDTabs from './components/CRUDTabs.jsx';
-import BudgetsGoals from './components/BudgetsGoals.jsx';
+import SettingsPanel from './components/SettingsPanel.jsx';
 
 function uid() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -11,9 +10,10 @@ function uid() {
 }
 
 export default function App() {
-  const fileRef = useRef(null);
+  // Primary navigation
+  const [view, setView] = useState('dashboard'); // 'dashboard' | 'manage' | 'settings'
 
-  // Demo local state. In a full app this would be persisted with IndexedDB (Dexie) or a backend.
+  // Demo state (would be persisted with IndexedDB in a full app)
   const [accounts, setAccounts] = useState([
     { id: uid(), name: 'Cash', type: 'Wallet', balance: 250.0 },
     { id: uid(), name: 'Checking', type: 'Bank', balance: 1340.42 },
@@ -80,19 +80,8 @@ export default function App() {
   const onAddGoal = (g) => setGoals(prev => [...prev, g]);
   const onRemoveGoal = (idx) => setGoals(prev => prev.filter((_,i)=>i!==idx));
 
-  // Import/Export/Share across devices (free, peer-to-peer via manual link/file)
+  // Import handler used by Settings
   const snapshot = useMemo(() => ({ accounts, transactions, investments, budgets, goals }), [accounts, transactions, investments, budgets, goals]);
-
-  const handleExport = () => {
-    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `finance-export-${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleImport = (file) => {
     if (!file) return;
     const reader = new FileReader();
@@ -109,13 +98,6 @@ export default function App() {
       }
     };
     reader.readAsText(file);
-  };
-
-  const handleShareLink = async () => {
-    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(snapshot))));
-    const url = `${window.location.origin}${window.location.pathname}#data=${encoded}`;
-    try { await navigator.clipboard.writeText(url); alert('Share link copied to clipboard. Open on another device to import.'); }
-    catch { prompt('Copy this link:', url); }
   };
 
   // Auto-import from hash if present
@@ -145,32 +127,37 @@ export default function App() {
               <div className="text-xs text-neutral-500 dark:text-neutral-400">Income {totals.income.toFixed(2)} • Expense {totals.expense.toFixed(2)} • Net {totals.net.toFixed(2)}</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={handleExport} className="inline-flex items-center gap-2 rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"><Download size={16}/>Export</button>
-            <button onClick={()=>fileRef.current?.click()} className="inline-flex items-center gap-2 rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"><Upload size={16}/>Import</button>
-            <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={e=>handleImport(e.target.files?.[0])} />
-            <button onClick={handleShareLink} className="inline-flex items-center gap-2 rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:opacity-90 dark:bg-white dark:text-neutral-900"><Share2 size={16}/>Share Link</button>
-          </div>
+          <nav className="flex items-center gap-1">
+            {[
+              { id: 'dashboard', label: 'Dashboard' },
+              { id: 'manage', label: 'Manage' },
+              { id: 'settings', label: 'Settings' },
+            ].map(item => (
+              <button key={item.id} onClick={()=>setView(item.id)}
+                className={`rounded-full px-3 py-1.5 text-sm ${view===item.id ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900' : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'}`}>
+                {item.label}
+              </button>
+            ))}
+          </nav>
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl space-y-6 p-4">
         <HeroSpline />
 
-        <section className="grid gap-4 md:grid-cols-2">
-          <ReportsChart transactions={transactions} />
-          <BudgetsGoals 
+        {view === 'dashboard' && (
+          <DashboardOverview 
+            transactions={transactions}
             budgets={budgets}
             goals={goals}
-            transactions={transactions}
             onAddBudget={onAddBudget}
             onRemoveBudget={onRemoveBudget}
             onAddGoal={onAddGoal}
             onRemoveGoal={onRemoveGoal}
           />
-        </section>
+        )}
 
-        <section>
+        {view === 'manage' && (
           <CRUDTabs 
             accounts={accounts}
             transactions={transactions}
@@ -179,7 +166,11 @@ export default function App() {
             onUpdate={handleUpdate}
             onDelete={handleDelete}
           />
-        </section>
+        )}
+
+        {view === 'settings' && (
+          <SettingsPanel snapshot={snapshot} onImport={handleImport} />
+        )}
 
         <footer className="py-8 text-center text-xs text-neutral-500">Offline-first. Share data across devices via export/import or share-link. No cloud required.</footer>
       </main>
